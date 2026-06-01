@@ -60,18 +60,34 @@ enable_param() {
 enable_param "dtparam=spi=on"
 enable_param "dtparam=i2c_arm=on"
 
-# --- 3. WM8960 audio driver ------------------------------------------------- #
-if aplay -l 2>/dev/null | grep -qi wm8960; then
-    echo "==> WM8960 driver already active, skipping"
-else
-    echo "==> Installing WM8960 audio HAT driver"
-    DRV_DIR=/opt/WM8960-Audio-HAT
-    if [[ ! -d "$DRV_DIR" ]]; then
-        git clone --depth 1 https://github.com/waveshareteam/WM8960-Audio-HAT "$DRV_DIR"
+# --- 3. WM8960 audio driver (best-effort; must never abort provisioning) ---- #
+# Audio-driver problems (transient network, or a DKMS build that doesn't support
+# the running kernel) should not block the rest of the install, so this whole
+# step is non-fatal.
+install_wm8960() {
+    if aplay -l 2>/dev/null | grep -qi wm8960; then
+        echo "==> WM8960 driver already active, skipping"
+        return 0
     fi
-    ( cd "$DRV_DIR" && ./install.sh ) || \
-        echo "!! WM8960 install.sh reported an error — see README troubleshooting"
-fi
+    echo "==> Installing WM8960 audio HAT driver"
+    local drv=/opt/WM8960-Audio-HAT
+    if [[ ! -d "$drv/.git" ]]; then
+        rm -rf "$drv"
+        local n
+        for n in 1 2 3; do
+            git clone --depth 1 https://github.com/waveshareteam/WM8960-Audio-HAT "$drv" && break
+            echo "!! WM8960 clone attempt $n failed (network?); retrying in 5s…"
+            sleep 5
+        done
+    fi
+    if [[ ! -d "$drv" ]]; then
+        echo "!! Could not fetch WM8960 driver; skipping. Re-run install.sh later to set up audio."
+        return 0
+    fi
+    ( cd "$drv" && ./install.sh ) || \
+        echo "!! WM8960 install.sh failed (running kernel $(uname -r)) — see README troubleshooting"
+}
+install_wm8960 || true
 
 # --- 4. group memberships (GPIO / SPI / I2C / audio) ------------------------ #
 echo "==> Adding $TARGET_USER to hardware groups"
