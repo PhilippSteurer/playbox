@@ -37,11 +37,23 @@ echo "==> Repo: $REPO_DIR"
 
 run_as_user() { sudo -u "$TARGET_USER" -H bash -lc "$*"; }
 
+# Retry a command (which may be a shell function) a few times to ride over the
+# transient WiFi/DNS blips common on the Pi Zero 2W's onboard adapter.
+retry() {  # retry <tries> <cmd...>
+    local tries="$1"; shift; local n
+    for n in $(seq 1 "$tries"); do
+        "$@" && return 0
+        echo "  (attempt $n/$tries failed; retrying in 5s…)"
+        sleep 5
+    done
+    return 1
+}
+
 # --- 1. system packages ----------------------------------------------------- #
 echo "==> Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y git build-essential curl alsa-utils i2c-tools
+retry 3 apt-get update
+apt-get install -y git build-essential curl alsa-utils i2c-tools iw
 # libmpv runtime (package name varies across releases)
 apt-get install -y libmpv2 || apt-get install -y libmpv1 || apt-get install -y libmpv-dev
 
@@ -59,6 +71,21 @@ enable_param() {
 }
 enable_param "dtparam=spi=on"
 enable_param "dtparam=i2c_arm=on"
+
+# --- 2b. WiFi stability ----------------------------------------------------- #
+# The Pi Zero 2W's onboard WiFi (brcmfmac) drops the link intermittently when
+# power saving is on, causing DNS/download failures mid-install. Disable it
+# now and persist via an ifupdown hook.
+if [[ -d /sys/class/net/wlan0 ]]; then
+    echo "==> Disabling WiFi power saving on wlan0 (persistent)"
+    tee /etc/network/if-up.d/wifi-powersave-off >/dev/null <<'EOF'
+#!/bin/sh
+[ "$IFACE" = wlan0 ] || exit 0
+/usr/sbin/iw dev wlan0 set power_save off || true
+EOF
+    chmod +x /etc/network/if-up.d/wifi-powersave-off
+    /usr/sbin/iw dev wlan0 set power_save off 2>/dev/null || true
+fi
 
 # --- 3. WM8960 audio driver (best-effort; must never abort provisioning) ---- #
 # Audio-driver problems (transient network, or a DKMS build that doesn't support
@@ -98,10 +125,10 @@ done
 # --- 5. install uv + playbox (as the target user) --------------------------- #
 if ! run_as_user "command -v uv" &>/dev/null; then
     echo "==> Installing uv for $TARGET_USER"
-    run_as_user "curl -LsSf https://astral.sh/uv/install.sh | sh"
+    retry 5 run_as_user "curl -LsSf https://astral.sh/uv/install.sh | sh"
 fi
 echo "==> Installing playbox package (with [pi] hardware extras)"
-run_as_user "cd '$REPO_DIR' && uv tool install --force '.[pi]'"
+retry 3 run_as_user "cd '$REPO_DIR' && uv tool install --force '.[pi]'"
 
 # --- 6. music directories --------------------------------------------------- #
 MUSIC_DIR=/mnt/dietpi_userdata/music
