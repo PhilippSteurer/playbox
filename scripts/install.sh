@@ -17,10 +17,17 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-TARGET_USER="${SUDO_USER:-dietpi}"
+# Target user for the service. Override with PLAYBOX_USER; otherwise the invoking
+# sudo user, otherwise DietPi's default 'dietpi'.
+TARGET_USER="${PLAYBOX_USER:-${SUDO_USER:-dietpi}}"
+
+# Create the user if it does not exist, as a normal login user with sudo.
 if ! id "$TARGET_USER" &>/dev/null; then
-    echo "User '$TARGET_USER' does not exist. Set SUDO_USER or create the user." >&2
-    exit 1
+    echo "==> Creating login user '$TARGET_USER' (with sudo)"
+    useradd -m -s /bin/bash "$TARGET_USER"
+    getent group sudo >/dev/null && usermod -aG sudo "$TARGET_USER" || true
+    echo "${TARGET_USER}:${PLAYBOX_USER_PASSWORD:-playbox}" | chpasswd
+    echo "!! Default password set to '${PLAYBOX_USER_PASSWORD:-playbox}'. Change it: sudo passwd $TARGET_USER"
 fi
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

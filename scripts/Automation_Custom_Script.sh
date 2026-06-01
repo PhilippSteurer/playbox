@@ -17,12 +17,21 @@ set -e
 
 # ---- EDIT ME --------------------------------------------------------------- #
 REPO_URL="https://github.com/youruser/playbox.git"
-TARGET_USER="dietpi"
+TARGET_USER="playbox"          # dedicated login user the service runs as
+USER_PASSWORD="playbox"        # CHANGE THIS — initial password for $TARGET_USER
 # --------------------------------------------------------------------------- #
 
 CLONE_DIR="/home/${TARGET_USER}/playbox"
 
 echo "[playbox] First-boot setup starting"
+
+# DietPi only ships 'root' and 'dietpi'; create our login + sudo user.
+if ! id "$TARGET_USER" &>/dev/null; then
+    echo "[playbox] Creating login user '$TARGET_USER'"
+    useradd -m -s /bin/bash "$TARGET_USER"
+    getent group sudo >/dev/null && usermod -aG sudo "$TARGET_USER" || true
+    echo "${TARGET_USER}:${USER_PASSWORD}" | chpasswd
+fi
 
 # DietPi installs git as part of base deps, but make sure.
 command -v git >/dev/null || apt-get install -y git
@@ -33,7 +42,7 @@ if [[ ! -d "$CLONE_DIR" ]]; then
 fi
 
 # Run the main installer (as root; it drops to the target user where needed).
-SUDO_USER="$TARGET_USER" bash "$CLONE_DIR/scripts/install.sh"
+PLAYBOX_USER="$TARGET_USER" bash "$CLONE_DIR/scripts/install.sh"
 
 echo "[playbox] First-boot setup complete; rebooting"
 reboot

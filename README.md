@@ -46,9 +46,11 @@ playbox can install itself on first boot using DietPi's automation.
 
 3. **Copy the automation script** to the card's boot partition:
    - Copy [`scripts/Automation_Custom_Script.sh`](scripts/Automation_Custom_Script.sh) to `/boot/Automation_Custom_Script.sh`.
-   - Edit the top of that file and set `REPO_URL` to your playbox repository (and `TARGET_USER` if not `dietpi`).
+   - Edit the top of that file: set `REPO_URL` to your playbox repository, and **change `USER_PASSWORD`** (the initial password for the `playbox` user).
 
-4. **Boot the Pi.** DietPi completes its base install, then runs the script, which clones the repo and executes `scripts/install.sh` (below). The Pi reboots when done.
+4. **Boot the Pi.** DietPi completes its base install, then runs the script, which creates a dedicated **`playbox` login user** (with sudo), clones the repo into `/home/playbox/playbox`, and executes `scripts/install.sh` (below). The Pi reboots when done.
+
+> **About the user:** DietPi only ever ships two accounts — `root` and `dietpi` — and there is no `dietpi.txt` option to create or rename a user before first boot. The `playbox` user is therefore created by the first-boot script (`useradd` + sudo group + password). The service runs as this user, and you can SSH in as `playbox` for administration. Change its password after first boot: `sudo passwd playbox`.
 
 The custom-script log is at `/var/tmp/dietpi/logs/dietpi-automation_custom_script.log` if you need to debug the first boot.
 
@@ -61,20 +63,24 @@ If you prefer a manual install (or are re-provisioning), clone the repo onto the
 ```bash
 git clone <your-repo-url> ~/playbox
 cd ~/playbox
-sudo bash scripts/install.sh
+# Create & target a dedicated 'playbox' user (set a password instead of the default):
+sudo PLAYBOX_USER=playbox PLAYBOX_USER_PASSWORD='choose-one' bash scripts/install.sh
 sudo reboot
 ```
 
+To instead run as the existing `dietpi` user, just `sudo bash scripts/install.sh` (it defaults to the invoking sudo user, falling back to `dietpi`).
+
 The script is idempotent and performs:
 
-1. Installs system packages (`git`, `build-essential`, `libmpv`, `alsa-utils`, `i2c-tools`).
-2. Enables **SPI** and **I2C** in `config.txt` (`dtparam=spi=on`, `dtparam=i2c_arm=on`).
-3. Installs the **WM8960** driver from [waveshareteam/WM8960-Audio-HAT](https://github.com/waveshareteam/WM8960-Audio-HAT).
-4. Adds the user to the `gpio`, `spi`, `i2c`, `audio` groups.
-5. Installs **uv** and then installs playbox with hardware extras: `uv tool install '.[pi]'` → provides the `playbox` command in `~/.local/bin`.
-6. Creates the music directory `/mnt/dietpi_userdata/music/playlists`.
-7. Grants passwordless `shutdown` (for the `shutdown` callback) via `/etc/sudoers.d/playbox-shutdown`.
-8. Installs and enables the **systemd** service `playbox.service`.
+1. Creates the target login user with sudo if it doesn't exist (skipped if it already does).
+2. Installs system packages (`git`, `build-essential`, `libmpv`, `alsa-utils`, `i2c-tools`).
+3. Enables **SPI** and **I2C** in `config.txt` (`dtparam=spi=on`, `dtparam=i2c_arm=on`).
+4. Installs the **WM8960** driver from [waveshareteam/WM8960-Audio-HAT](https://github.com/waveshareteam/WM8960-Audio-HAT).
+5. Adds the user to the `gpio`, `spi`, `i2c`, `audio` groups.
+6. Installs **uv** and then installs playbox with hardware extras: `uv tool install '.[pi]'` → provides the `playbox` command in `~/.local/bin`.
+7. Creates the music directory `/mnt/dietpi_userdata/music/playlists`.
+8. Grants passwordless `shutdown` (for the `shutdown` callback) via `/etc/sudoers.d/playbox-shutdown`.
+9. Installs and enables the **systemd** service `playbox.service`.
 
 A **reboot is required** afterwards for SPI/I2C and the WM8960 overlay.
 
