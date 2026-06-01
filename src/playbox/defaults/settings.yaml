@@ -1,0 +1,26 @@
+# playbox runtime settings.
+# Copied into your config directory on first run if missing. Edit there.
+
+# Directory holding music files. Playlists (.m3u/.m3u8) are expected under
+# <music_dir>/playlists. On the Pi this defaults to the DietPi user data area.
+music_dir: /mnt/dietpi_userdata/music
+
+# ALSA output device passed to mpv. After installing the WM8960 driver, find the
+# card with `aplay -l` (typically card 1) and set e.g. "alsa/hw:1,0".
+# Leave as "auto" to let mpv pick the default device (useful on a dev PC).
+audio_device: auto
+
+# Default startup volume (0-100).
+volume: 70
+
+# Web interface bind address/port. 0.0.0.0 makes it reachable on the LAN.
+web_host: 0.0.0.0
+web_port: 8050
+
+# RFID reading is interrupt-driven via the RC522 IRQ pin (no constant polling).
+# This timeout (seconds) only controls how often the IRQ wait re-arms so the
+# service can react to a shutdown request; it does not poll the card over SPI.
+rfid_wait_timeout: 0.5
+
+# Seconds to ignore repeat reads of the same tag while it is held to the reader.
+rfid_debounce: 1.0

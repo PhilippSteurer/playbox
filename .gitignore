@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# playbox runtime config (seeded from src/playbox/defaults on first run)
+/config/

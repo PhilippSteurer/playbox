@@ -1,0 +1,27 @@
+# RFID tag configuration.
+#
+# Each entry maps a tag UID to a callback that runs when the tag is held to the
+# reader. UIDs are captured from the web Setup page ("Register tag"), so you do
+# not normally edit this file by hand — but the schema is documented here.
+#
+# Fields:
+#   id          : tag UID as a hex string (uppercase, no separators)
+#   name        : short human label
+#   description : optional longer note
+#   callback    : name of a registered callback (see README "Built-in callbacks")
+#   args        : mapping of keyword arguments passed to that callback
+#
+# Example entries (remove or replace with your own):
+tags:
+  - id: "04A1B2C3D4"
+    name: "Example album"
+    description: "Plays a playlist named example_album"
+    callback: play_playlist
+    args:
+      playlist: example_album
+
+  - id: "12FF00AA"
+    name: "Stop tag"
+    description: "Stops playback"
+    callback: stop
+    args: {}

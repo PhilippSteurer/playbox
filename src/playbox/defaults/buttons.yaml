@@ -1,0 +1,40 @@
+# GPIO button configuration.
+#
+# Each entry binds a button (by BCM GPIO number) to a callback, using the same
+# callback registry as RFID tags. Pins below are the "freely available" pins
+# from pinout.md, chosen to avoid the SPI/I2C/I2S pins used by the RC522 and
+# WM8960. Keep that constraint if you change them.
+#
+# Fields:
+#   pin         : BCM GPIO number the button is wired to
+#   name        : short human label
+#   callback    : name of a registered callback
+#   args        : mapping of keyword arguments passed to that callback
+#   bounce_time : optional debounce seconds (default applied if omitted)
+buttons:
+  - pin: 27          # physical pin 13
+    name: "Play/Pause"
+    callback: toggle
+    args: {}
+
+  - pin: 22          # physical pin 15
+    name: "Volume Up"
+    callback: volume
+    args:
+      delta: 5
+
+  - pin: 23          # physical pin 16
+    name: "Volume Down"
+    callback: volume
+    args:
+      delta: -5
+
+  - pin: 4           # physical pin 7 (optional)
+    name: "Previous"
+    callback: previous
+    args: {}
+
+  - pin: 14          # physical pin 8 (optional)
+    name: "Next"
+    callback: next
+    args: {}

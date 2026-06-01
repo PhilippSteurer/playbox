@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "playbox"
+version = "0.1.0"
+description = "Offline Raspberry Pi music player controlled via hardware buttons, RFID tags and a Plotly Dash web interface."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "playbox" }]
+keywords = ["raspberry-pi", "rfid", "music-player", "dash", "wm8960", "rc522"]
+
+# Core dependencies — installable on any machine (dev PC included) so the web
+# app and player logic can be worked on without the Pi hardware present.
+dependencies = [
+    "dash>=2.16",
+    "python-mpv>=1.0.5",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Hardware-only dependencies. Installed on the Pi with: pip install '.[pi]'
+# These pull in GPIO/SPI libraries that only make sense on the device.
+pi = [
+    "gpiozero>=2.0",
+    "lgpio>=0.2.2.0",
+    "pi-rc522-gpiozero>=2.3.0",
+    "spidev>=3.6",
+]
+
+[project.scripts]
+playbox = "playbox.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/playbox/playbox"
+
+[tool.hatch.build.targets.wheel]
+# Maps src/playbox -> playbox in the wheel. Non-Python files inside the package
+# (defaults/*.yaml, web/assets/*.css) are included automatically, so the default
+# configs ship as package data and can seed config/ on first run.
+packages = ["src/playbox"]

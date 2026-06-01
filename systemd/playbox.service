@@ -1,0 +1,21 @@
+# playbox systemd service.
+#
+# This is a template: scripts/install.sh substitutes __USER__, __HOME__ and
+# __REPO__ and installs the result to /etc/systemd/system/playbox.service.
+[Unit]
+Description=playbox offline music player
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO__
+Environment=PLAYBOX_CONFIG_DIR=__REPO__/config
+Environment=PATH=__HOME__/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=__HOME__/.local/bin/playbox
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
