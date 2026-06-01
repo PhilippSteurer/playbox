@@ -16,7 +16,7 @@
 set -e
 
 # ---- EDIT ME --------------------------------------------------------------- #
-REPO_URL="https://github.com/youruser/playbox.git"
+REPO_URL="https://github.com/PhilippSteurer/playbox.git"
 TARGET_USER="playbox"          # dedicated login user the service runs as
 USER_PASSWORD="playbox"        # CHANGE THIS — initial password for $TARGET_USER
 # --------------------------------------------------------------------------- #
