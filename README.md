@@ -49,10 +49,10 @@ playbox targets **DietPi**. Flash a current DietPi image for the Pi Zero 2W and 
    ```bash
    sudo apt update
    sudo apt install -y git build-essential swig curl wget \
-       alsa-utils i2c-tools libasound2-dev libmpv2 \
+       alsa-utils i2c-tools libasound2-dev libmpv2 liblgpio-dev \
        python3-pip python3-venv python3-dev linux-headers-rpi-v8
    ```
-   `swig` + `python3-dev` are needed to build the `lgpio`/`rpi-lgpio` wheels; `libmpv2` is the audio backend; `linux-headers-*` lets the WM8960 DKMS module build.
+   `swig` + `python3-dev` + `liblgpio-dev` are needed to build the `lgpio`/`rpi-lgpio` wheels (without `liblgpio-dev` the build fails with `cannot find -llgpio`); `libmpv2` is the audio backend; `linux-headers-*` lets the WM8960 DKMS module build.
 
 6. **Hardware group access** for the `playbox` user:
    ```bash
@@ -87,7 +87,7 @@ This provides the `playbox` command at `~/playbox/.venv/bin/playbox`.
 
 > **About the RFID stack.** The reader uses **`pi-rc522`** plus **`rpi-lgpio`** (an lgpio-backed drop-in for `RPi.GPIO`). The stock `RPi.GPIO` fails on current kernels with *"Failed to add edge detection"*, so `rpi-lgpio` replaces it. Because `pi-rc522` hard-depends on `RPi.GPIO` (which would collide with `rpi-lgpio`), it is installed with `--no-deps`; the `[pi]` extra already supplies `rpi-lgpio` + `spidev`.
 >
-> If the `lgpio` wheel fails to build, make sure `swig` and `python3-dev` are installed (step 5), or install a prebuilt aarch64 `lgpio` wheel before re-running the install.
+> If the `lgpio` wheel fails to build with `cannot find -llgpio`, install the C library it links against: `sudo apt install -y liblgpio-dev` (plus `swig` + `python3-dev` for the build), then re-run the install.
 
 ### systemd service
 

@@ -57,10 +57,11 @@ retry() {  # retry <tries> <cmd...>
 echo "==> Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 retry 3 apt-get update
-# Build deps: swig + python3-dev are needed to build the lgpio/rpi-lgpio wheels;
+# Build deps: swig + python3-dev + liblgpio-dev are needed to build the
+# lgpio/rpi-lgpio wheels (without liblgpio-dev: "cannot find -llgpio");
 # libasound2-dev for ALSA; the rest are general tooling.
 apt-get install -y git build-essential swig curl wget alsa-utils i2c-tools iw \
-    libasound2-dev python3-dev python3-venv python3-pip
+    libasound2-dev liblgpio-dev python3-dev python3-venv python3-pip
 # libmpv runtime (package name varies across releases)
 apt-get install -y libmpv2 || apt-get install -y libmpv1 || apt-get install -y libmpv-dev
 
