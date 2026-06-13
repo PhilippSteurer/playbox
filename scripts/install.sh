@@ -3,9 +3,13 @@
 # playbox provisioning script for DietPi / Raspberry Pi OS.
 #
 # Idempotent: safe to re-run. Must be run as root (sudo). It installs system
-# packages, enables SPI/I2C, installs the WM8960 audio driver, installs playbox
-# as a uv tool for the target user, creates the music directories and installs +
-# enables the systemd service.
+# packages, enables SPI/I2C, installs the WM8960 audio driver, creates a Python
+# venv in the repo and pip-installs playbox into it for the target user, creates
+# the music directories and installs + enables the systemd service.
+#
+# NOTE: the primary, documented install path is the manual one in the README
+# (venv + pip). This script mirrors it for unattended/automated provisioning and
+# is kept working, but is not the path most users will follow today.
 #
 #   sudo ./scripts/install.sh
 #
@@ -53,7 +57,10 @@ retry() {  # retry <tries> <cmd...>
 echo "==> Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 retry 3 apt-get update
-apt-get install -y git build-essential curl alsa-utils i2c-tools iw
+# Build deps: swig + python3-dev are needed to build the lgpio/rpi-lgpio wheels;
+# libasound2-dev for ALSA; the rest are general tooling.
+apt-get install -y git build-essential swig curl wget alsa-utils i2c-tools iw \
+    libasound2-dev python3-dev python3-venv python3-pip
 # libmpv runtime (package name varies across releases)
 apt-get install -y libmpv2 || apt-get install -y libmpv1 || apt-get install -y libmpv-dev
 
@@ -122,13 +129,16 @@ for grp in gpio spi i2c audio; do
     getent group "$grp" >/dev/null && usermod -aG "$grp" "$TARGET_USER" || true
 done
 
-# --- 5. install uv + playbox (as the target user) --------------------------- #
-if ! run_as_user "command -v uv" &>/dev/null; then
-    echo "==> Installing uv for $TARGET_USER"
-    retry 5 run_as_user "curl -LsSf https://astral.sh/uv/install.sh | sh"
-fi
+# --- 5. create venv + install playbox (as the target user) ------------------ #
+echo "==> Creating Python venv at $REPO_DIR/.venv"
+run_as_user "cd '$REPO_DIR' && python3 -m venv .venv && .venv/bin/pip install --upgrade pip"
 echo "==> Installing playbox package (with [pi] hardware extras)"
-retry 3 run_as_user "cd '$REPO_DIR' && uv tool install --force '.[pi]'"
+retry 3 run_as_user "cd '$REPO_DIR' && .venv/bin/pip install '.[pi]'"
+# pi-rc522 is installed without its deps on purpose: it hard-depends on RPi.GPIO,
+# which fails on current kernels and collides with rpi-lgpio (installed via the
+# [pi] extra, which supplies the RPi.GPIO module name pi-rc522 imports).
+echo "==> Installing pi-rc522 (RFID library, --no-deps)"
+retry 3 run_as_user "cd '$REPO_DIR' && .venv/bin/pip install --no-deps pi-rc522"
 
 # --- 6. music directories --------------------------------------------------- #
 MUSIC_DIR=/mnt/dietpi_userdata/music

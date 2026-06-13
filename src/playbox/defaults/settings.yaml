@@ -5,8 +5,8 @@
 # <music_dir>/playlists. On the Pi this defaults to the DietPi user data area.
 music_dir: /mnt/dietpi_userdata/music
 
-# ALSA output device passed to mpv. After installing the WM8960 driver, find the
-# card with `aplay -l` (typically card 1) and set e.g. "alsa/hw:1,0".
+# ALSA output device passed to mpv. With the WM8960 HAT enabled it enumerates as
+# card 0 (check with `aplay -l`), so set "alsa/hw:0,0" on the Pi.
 # Leave as "auto" to let mpv pick the default device (useful on a dev PC).
 audio_device: auto
 

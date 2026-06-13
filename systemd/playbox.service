@@ -12,8 +12,8 @@ Type=simple
 User=__USER__
 WorkingDirectory=__REPO__
 Environment=PLAYBOX_CONFIG_DIR=__REPO__/config
-Environment=PATH=__HOME__/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=__HOME__/.local/bin/playbox
+Environment=PATH=__REPO__/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=__REPO__/.venv/bin/playbox
 Restart=on-failure
 RestartSec=3
 

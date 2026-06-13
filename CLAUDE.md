@@ -8,10 +8,11 @@ playbox is a Raspberry Pi Zero 2W based **offline** music player controlled thre
 
 ## Development workflow (important)
 
-- **Code is developed on a dev PC and deployed to the Pi to test.** Do **not** create/run the uv venv, install packages, or run hardware code on the dev PC — that all happens on the Pi. Author code, config, scripts, and docs only.
+- **Code is developed on a dev PC and deployed to the Pi to test.** Do **not** create/run the venv, install packages, or run hardware code on the dev PC — that all happens on the Pi. Author code, config, scripts, and docs only.
 - The app is designed to import and run without hardware: `hardware/rfid.py`, `hardware/buttons.py`, and `player.py` all degrade to no-ops (logged warnings) when their libs/devices are absent, so the web app can be worked on off-device.
-- On the Pi: `sudo bash scripts/install.sh` provisions everything (packages, SPI/I2C, WM8960 driver, `uv tool install '.[pi]'`, systemd). Then `systemctl {status,restart} playbox` and `journalctl -u playbox -f`.
-- Dev run (off-device): `uv sync` then `PLAYBOX_CONFIG_DIR=./config uv run playbox`.
+- **On the Pi (manual, documented path):** OS prerequisites are set up by hand (see README); then `python3 -m venv .venv && source .venv/bin/activate && pip install '.[pi]' && pip install --no-deps pi-rc522`, install the systemd unit, then `systemctl {status,restart} playbox` and `journalctl -u playbox -f`. `scripts/install.sh` automates the same venv/pip steps for later use.
+- Dev run (off-device): `pip install -e .` then `PLAYBOX_CONFIG_DIR=./config python -m playbox`.
+- **RFID stack:** `pi-rc522` (import `pirc522`) + `rpi-lgpio` (an lgpio-backed `RPi.GPIO` shim — stock `RPi.GPIO` fails with "Failed to add edge detection" on the 6.18 kernel). `pi-rc522` is installed `--no-deps` so it doesn't pull `RPi.GPIO` and collide with `rpi-lgpio`. Construct the reader as bare `RFID()` (its BOARD-pin defaults map to our BCM25/24 wiring). The WM8960 HAT enumerates as **card 0** (`alsa/hw:0,0`).
 
 ## Architecture
 

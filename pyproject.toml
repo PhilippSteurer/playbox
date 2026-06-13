@@ -23,10 +23,18 @@ dependencies = [
 [project.optional-dependencies]
 # Hardware-only dependencies. Installed on the Pi with: pip install '.[pi]'
 # These pull in GPIO/SPI libraries that only make sense on the device.
+#
+# NOTE: the RFID library `pi-rc522` is deliberately NOT listed here. It hard-
+# depends on `RPi.GPIO`, which fails on current kernels ("Failed to add edge
+# detection") and collides with `rpi-lgpio` (both own the `RPi/` package dir).
+# Install it separately, without its deps, after this extra:
+#     pip install --no-deps pi-rc522
+# `rpi-lgpio` below provides the `RPi.GPIO` module name (backed by lgpio) that
+# pi-rc522 imports. See README / scripts/install.sh.
 pi = [
     "gpiozero>=2.0",
-    "lgpio>=0.2.2.0",
-    "pi-rc522-gpiozero>=2.3.0",
+    "lgpio>=0.2.2",
+    "rpi-lgpio>=0.6",
     "spidev>=3.6",
 ]
 

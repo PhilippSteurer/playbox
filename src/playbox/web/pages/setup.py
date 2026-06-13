@@ -115,7 +115,7 @@ def layout(**_kwargs):
                         children=[
                             html.Label("Music directory"),
                             dcc.Input(id="pb-set-music", type="text", value=str(s.music_dir)),
-                            html.Label("Audio device (ALSA, e.g. alsa/hw:1,0 — restart to apply)"),
+                            html.Label("Audio device (ALSA, e.g. alsa/hw:0,0 — restart to apply)"),
                             dcc.Input(id="pb-set-audio", type="text", value=s.audio_device),
                             html.Label("Default volume"),
                             dcc.Input(id="pb-set-volume", type="number", min=0, max=100, value=s.volume),

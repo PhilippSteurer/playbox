@@ -1,9 +1,13 @@
 """RC522 RFID reader service — interrupt-driven via the IRQ pin.
 
-Rather than polling the card over SPI in a tight loop, this arms the RC522's
-IRQ register and blocks on the GPIO interrupt event (pin GPIO24 per pinout.md).
-The wait uses a short timeout purely so the thread can notice a stop request;
-it does not poll the card itself.
+Rather than polling the card over SPI in a tight loop, this uses pi-rc522's
+``wait_for_tag()``, which arms the RC522's IRQ register and blocks on the GPIO
+interrupt event (RST=GPIO24/IRQ wiring per pinout.md) until a card is present
+or the wait is interrupted for shutdown. It does not poll the card itself.
+
+The RFID stack on the Pi is ``pi-rc522`` (imported as ``pirc522``) plus
+``rpi-lgpio`` — an lgpio-backed drop-in for ``RPi.GPIO``, because the stock
+``RPi.GPIO`` fails with "Failed to add edge detection" on current kernels.
 
 On a machine without the RFID library/hardware (e.g. a dev PC), the service
 logs a warning and does nothing, so the rest of the app still runs.
@@ -21,10 +25,11 @@ from ..scan_state import ScanState
 
 log = logging.getLogger(__name__)
 
-# Pins from pinout.md (BCM numbering).
-PIN_RST = 25
-PIN_IRQ = 24
-PIN_CE = 0  # SPI0 CE0 -> GPIO8
+# Wiring per pinout.md: RST=GPIO25, IRQ=GPIO24, CE0=GPIO8. pi-rc522 uses BOARD
+# pin numbering by default, and its defaults (RST=BOARD 22, IRQ=BOARD 18, CE0)
+# map to exactly these BCM pins (BOARD 22 -> BCM25, BOARD 18 -> BCM24). So the
+# reader is constructed with bare RFID() — passing BCM numbers here would target
+# the wrong physical pins.
 
 
 def uid_to_str(uid: list[int]) -> str:
@@ -54,13 +59,15 @@ class RFIDService:
     # -- lifecycle ---------------------------------------------------------- #
     def start(self) -> None:
         try:
-            from pirc522 import RFID  # provided by pi-rc522-gpiozero
+            from pirc522 import RFID  # provided by pi-rc522
         except Exception as exc:  # noqa: BLE001
             log.warning("RFID reader disabled (library/hardware unavailable): %s", exc)
             return
 
         try:
-            self._rfid = RFID(pin_rst=PIN_RST, pin_irq=PIN_IRQ, pin_ce=PIN_CE)
+            # Bare RFID(): its BOARD-numbering defaults map to our BCM25/24/CE0
+            # wiring (see module note). Passing BCM numbers would be wrong.
+            self._rfid = RFID()
         except Exception as exc:  # noqa: BLE001
             log.warning("RFID reader disabled (init failed): %s", exc)
             self._rfid = None
@@ -68,7 +75,7 @@ class RFIDService:
 
         self._thread = threading.Thread(target=self._run, name="rfid", daemon=True)
         self._thread.start()
-        log.info("RFID service started (IRQ on GPIO%d)", PIN_IRQ)
+        log.info("RFID service started (interrupt-driven via IRQ pin)")
 
     def stop(self) -> None:
         self._stop.set()
@@ -87,11 +94,13 @@ class RFIDService:
 
     # -- main loop ---------------------------------------------------------- #
     def _run(self) -> None:
-        timeout = self.settings.rfid_wait_timeout
         while not self._stop.is_set():
             try:
-                if not self._arm_and_wait(timeout):
-                    continue  # timed out: re-check stop flag, re-arm
+                # Interrupt-driven: blocks on the RC522 IRQ until a card is
+                # present, or until stop() sets the reader's irq event.
+                self._rfid.wait_for_tag()
+                if self._stop.is_set():
+                    break
                 uid = self._read_uid()
                 if uid is None:
                     continue
@@ -99,30 +108,6 @@ class RFIDService:
             except Exception:  # noqa: BLE001 - keep the reader alive
                 log.exception("RFID loop error")
                 time.sleep(0.2)
-
-    def _arm_and_wait(self, timeout: float) -> bool:
-        """Arm the RC522 IRQ for card detection and wait on the interrupt.
-
-        Returns True if the IRQ fired (a card is likely present), False on
-        timeout. Falls back to the library's blocking ``wait_for_tag`` if the
-        low-level register API isn't available.
-        """
-        r = self._rfid
-        irq = getattr(r, "irq", None)
-        if irq is not None and hasattr(r, "dev_write") and hasattr(r, "init"):
-            r.init()
-            irq.clear()
-            r.dev_write(0x04, 0x00)
-            r.dev_write(0x02, 0xA0)  # enable RxIRq on the IRQ pin
-            r.dev_write(0x09, 0x26)  # REQA
-            r.dev_write(0x01, 0x0C)  # transceive
-            r.dev_write(0x0D, 0x87)  # start transmission
-            fired = irq.wait(timeout)
-            irq.clear()
-            return fired and not self._stop.is_set()
-        # Fallback: blocking wait (no timeout-based stop responsiveness).
-        r.wait_for_tag()
-        return not self._stop.is_set()
 
     def _read_uid(self) -> str | None:
         r = self._rfid
@@ -132,6 +117,10 @@ class RFIDService:
         error, uid = r.anticoll()
         if error:
             return None
+        try:
+            r.stop_crypto()  # release the card after a successful read
+        except Exception:  # noqa: BLE001
+            pass
         return uid_to_str(uid)
 
     def _handle_uid(self, uid: str) -> None:
