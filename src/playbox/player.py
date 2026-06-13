@@ -31,12 +31,23 @@ class PlayerController:
         if audio_device and audio_device != "auto":
             mpv_kwargs["audio_device"] = audio_device
 
-        self._mpv = mpv.MPV(**mpv_kwargs)
+        # Route libmpv's own log (errors only) into our logger; otherwise a
+        # failure to open a file is swallowed and never reaches journalctl.
+        self._mpv = mpv.MPV(log_handler=self._on_mpv_log, loglevel="error", **mpv_kwargs)
         log.info("mpv initialised (audio_device=%s, volume=%d)", audio_device, self._volume)
+
+    @staticmethod
+    def _on_mpv_log(loglevel: str, component: str, message: str) -> None:
+        log.error("mpv[%s] %s", component, message.strip())
 
     # -- queue / tracks ----------------------------------------------------- #
     def play_track(self, track: str) -> None:
         path = self.library.resolve_track(track)
+        if not path.exists():
+            # Most likely a Unicode normalization (NFC vs NFD) mismatch between
+            # the on-disk name and the string round-tripped through the web UI,
+            # e.g. names with umlauts / combining accents.
+            log.error("Track not found on disk: %s (requested %r)", path, track)
         log.info("Playing track %s", path)
         self._mpv.play(str(path))
         self._mpv.pause = False
