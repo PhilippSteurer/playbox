@@ -1,13 +1,13 @@
 # playbox
 
-playbox is a Raspberry Pi based **offline** music player that supports control via hardware buttons, RFID tags and a web interface. It uses the WM8960 Audio HAT and an RC522 RFID reader on a Raspberry Pi Zero 2W.
+playbox is a Raspberry Pi based **offline** music player controlled three ways: hardware buttons, RFID tags, and a web interface. It runs on a Pi Zero 2W with a WM8960 Audio HAT and an RC522 RFID reader.
 
-Music plays entirely from local files — no network is required at playback time. Tags and buttons trigger **callbacks** (play a track, play a playlist, pause, stop, shutdown, …) and the callback system is open so you can add your own.
+Music plays entirely from local files — no network is needed at playback time. Tags and buttons trigger **callbacks** (play a track, play a playlist, pause, volume, shutdown, …), and the callback system is open so you can add your own.
 
-- **Web app** (Plotly Dash) with three pages: **Play** (browse/play tracks & playlists), **Control** (transport, volume, now-playing), **Setup** (register RFID tags, manage tags, edit settings).
-- **RFID** tags are configured *from the web app*: hold a tag to the reader, its UID is captured, and you assign a name, description and callback. Configurations are stored in `config/tags.yaml`.
-- **Buttons** are wired to the same callbacks via `config/buttons.yaml`.
-- Packaged as an installable Python package (`pip install .`) exposing a `playbox` command, run as a systemd service.
+- **Web app** (Plotly Dash), three pages: **Play** (browse and play), **Control** (transport, volume, now playing), **Setup** (register RFID tags, edit settings).
+- **RFID tags** are registered *from the web app*: hold a tag to the reader, its UID is captured, then you pick a callback for it. Stored in `config/tags.yaml`.
+- **Buttons** map GPIO pins to the same callbacks via `config/buttons.yaml`.
+- A normal Python package (`pip install .`) exposing a `playbox` command, **started by hand**. No service is installed — see [section 7](#7-optional-run-it-on-boot) if you want that later.
 
 ---
 
@@ -18,141 +18,233 @@ Music plays entirely from local files — no network is required at playback tim
 | Raspberry Pi Zero 2W + microSD (16 GB+) | — |
 | WM8960 Audio HAT | I2C (codec control) + I2S (audio) |
 | RC522 RFID reader | SPI (+ IRQ, RST) |
-| Push buttons (play/pause, volume, prev/next) | GPIO |
+| Push buttons | GPIO |
 
-Wire everything according to **[`pinout.md`](pinout.md)** — it is the authoritative pin reference. Key points:
+Wire per **[`pinout.md`](pinout.md)**, which is the authoritative reference. Key points:
 
-- RC522 is on **SPI0** (CE0=GPIO8, SCLK=GPIO11, MOSI=GPIO10, MISO=GPIO9) and uses **IRQ=GPIO24** and **RST=GPIO25**. playbox reads the reader **interrupt-driven** via the IRQ pin (no constant polling), so wiring IRQ is required.
-- WM8960 uses I2C (GPIO2/3) and I2S (GPIO18/19/20/21) — handled by its driver.
-- Default button pins (free pins, chosen to avoid the buses above): GPIO27 play/pause, GPIO22 volume up, GPIO23 volume down, GPIO4 previous, GPIO14 next.
+- RC522 on **SPI0** (CE0=GPIO8, SCLK=GPIO11, MOSI=GPIO10, MISO=GPIO9) with **IRQ=GPIO24** and **RST=GPIO25**. Tag reads are interrupt-driven off the IRQ pin, so wiring IRQ is **required**.
+- WM8960 uses I2C (GPIO2/3) and I2S (GPIO18/19/20/21).
+- Default button pins, chosen to avoid those buses: GPIO27 play/pause, GPIO22 volume up, GPIO23 volume down, GPIO4 previous, GPIO14 next.
 
 ---
 
-## 2. Operating system setup (manual, done once)
+## 2. Operating system setup (once)
 
-playbox targets **DietPi**. Flash a current DietPi image for the Pi Zero 2W and complete the base setup, then perform the prerequisites below. These are done by hand once; the playbox app itself is installed in [section 3](#3-install-playbox).
+playbox runs on **Raspberry Pi OS Lite (32-bit)**. Everything the hardware needs is already in that image — there is **no driver to build**. This is the main difference from the old DietPi setup, which needed an out-of-tree WM8960 DKMS module.
 
-1. **Flash & first boot.** Flash the DietPi image and complete DietPi's initial setup: connect Wi-Fi, run updates, switch the SSH server to **OpenSSH**, set timezone/keyboard.
+### 2.1 Flash and first boot
 
-2. **Enable buses & audio** with `dietpi-config`:
-   - Enable **I2C** and **SPI**.
-   - Under *Audio Options*, enable the sound card and select **WM8960**.
+Flash Raspberry Pi OS Lite (32-bit) with Raspberry Pi Imager. In the Imager's settings, set the hostname to `playbox`, create the user `playbox`, enable SSH with your public key, and configure Wi-Fi. Then SSH in:
 
-3. **WM8960 quirk.** Add the following line to `/boot/dietpi.txt` (required for the WM8960 driver to build/load on this image):
-   ```
-   arm_64bit=0
-   ```
+```bash
+ssh playbox@playbox.local
+```
 
-4. **Hostname & user.** Set the hostname to `playbox`. Create a login user `playbox` with sudo rights, and add your SSH public key so you can log in over SSH without a password.
+The `playbox` user is in the `sudo` group by default, along with `gpio`, `i2c`, `spi` and `audio` — so no `usermod` step is needed.
 
-5. **Install system packages:**
-   ```bash
-   sudo apt update
-   sudo apt install -y git build-essential swig curl wget \
-       alsa-utils i2c-tools libasound2-dev libmpv2 liblgpio-dev \
-       python3-pip python3-venv python3-dev linux-headers-rpi-v8
-   ```
-   `swig` + `python3-dev` + `liblgpio-dev` are needed to build the `lgpio`/`rpi-lgpio` wheels (without `liblgpio-dev` the build fails with `cannot find -llgpio`); `libmpv2` is the audio backend; `linux-headers-*` lets the WM8960 DKMS module build.
+### 2.2 Enable SPI and I2C
 
-6. **Hardware group access** for the `playbox` user:
-   ```bash
-   sudo usermod -aG audio,i2c,spi,gpio playbox
-   ```
-   Log out/in (or reboot) for the new groups to take effect.
+```bash
+sudo raspi-config
+```
 
-7. **Verify audio.** After a reboot, the WM8960 should enumerate as **card 0**:
-   ```bash
-   aplay -l        # expect: card 0: wm8960soundcard ...
-   ```
+- **Interface Options → I4 SPI → Enable** — needed for the RC522.
+- **Interface Options → I5 I2C → Enable** — gives you `/dev/i2c-1` for debugging the codec.
+
+### 2.3 Enable the WM8960 sound card
+
+`raspi-config` has no entry for this, so edit `/boot/firmware/config.txt` by hand:
+
+```bash
+sudo nano /boot/firmware/config.txt
+```
+
+Change the vc4 line to drop HDMI audio, so the WM8960 becomes card 0:
+
+```diff
+- dtoverlay=vc4-kms-v3d
++ dtoverlay=vc4-kms-v3d,noaudio
+```
+
+and add this at the **end of the file** (it must be under `[all]`, not under a `[pi5]`/`[cm4]` section):
+
+```
+# Waveshare WM8960 Audio HAT (I2C control + I2S audio)
+dtoverlay=wm8960-soundcard
+```
+
+> **Watch the spelling.** The firmware silently ignores keys it doesn't recognise — a typo like `dtoverly=` produces no error anywhere, you just get no sound card.
+
+That single line *is* the driver installation. The codec driver (`snd-soc-wm8960`), the generic `simple-audio-card` machine driver, and the overlay itself all ship with Raspberry Pi OS. The overlay enables I2S, declares the codec on I2C at address `0x1a`, and joins them into a card. Then reboot:
+
+```bash
+sudo reboot
+```
+
+### 2.4 Install system packages
+
+```bash
+sudo apt update
+sudo apt install -y git python3-venv \
+    alsa-utils i2c-tools \
+    python3-mpv python3-yaml \
+    python3-gpiozero python3-spidev python3-lgpio python3-rpi-lgpio
+```
+
+All prebuilt — **nothing compiles**, which matters on a Zero 2W. `python3-rpi-lgpio` is important: it provides the `RPi.GPIO` import name backed by lgpio. The stock `RPi.GPIO` fails with *"Failed to add edge detection"* on current kernels.
+
+### 2.5 Verify the hardware
+
+```bash
+aplay -l          # expect: card 0: wm8960soundcard [wm8960-soundcard]
+ls /dev/spidev*   # expect: /dev/spidev0.0  /dev/spidev0.1
+i2cdetect -y 1    # expect: UU at address 1a  (UU = kernel driver bound — good)
+```
+
+### 2.6 Unmute the codec
+
+The WM8960 powers up with its **output mixers muted**, so a correctly working card still plays silence. The DAC signal never reaches the headphone/speaker amplifiers until you close these two switches:
+
+```bash
+amixer -c 0 sset 'Left Output Mixer PCM' on
+amixer -c 0 sset 'Right Output Mixer PCM' on
+```
+
+Test, then save so it survives a reboot:
+
+```bash
+speaker-test -D hw:0,0 -c 2 -t sine -f 440 -l 1
+sudo alsactl store
+```
+
+`alsactl store` writes `/var/lib/alsa/asound.state`, which the `alsa-restore` service (part of `alsa-utils`) replays on every boot. Use `alsamixer -c 0` for interactive tweaking, then `sudo alsactl store` again.
 
 ---
 
 ## 3. Install playbox
 
-playbox installs into a normal Python **venv** with `pip`. As the `playbox` user:
-
 ```bash
 git clone <your-repo-url> ~/playbox
 cd ~/playbox
 
-python3 -m venv .venv
+python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 
-pip install --upgrade pip
-pip install '.[pi]'
-pip install --no-deps pi-rc522     # RFID library — see note below
+pip install .
+pip install --no-deps pi-rc522
 ```
 
-This provides the `playbox` command at `~/playbox/.venv/bin/playbox`.
+Two things are worth understanding here:
 
-> **About the RFID stack.** The reader uses **`pi-rc522`** plus **`rpi-lgpio`** (an lgpio-backed drop-in for `RPi.GPIO`). The stock `RPi.GPIO` fails on current kernels with *"Failed to add edge detection"*, so `rpi-lgpio` replaces it. Because `pi-rc522` hard-depends on `RPi.GPIO` (which would collide with `rpi-lgpio`), it is installed with `--no-deps`; the `[pi]` extra already supplies `rpi-lgpio` + `spidev`.
->
-> If the `lgpio` wheel fails to build with `cannot find -llgpio`, install the C library it links against: `sudo apt install -y liblgpio-dev` (plus `swig` + `python3-dev` for the build), then re-run the install.
+- **`--system-site-packages`** lets the venv see the apt-installed `python3-mpv`, `python3-yaml`, `python3-gpiozero`, `python3-spidev` and `python3-rpi-lgpio`. Without it pip would try to build those from source on the Pi. With it, `pip install .` only needs to fetch `dash`.
+- **`--no-deps` on pi-rc522** because it declares a hard dependency on `RPi.GPIO`. Letting pip install that would shadow the apt `rpi-lgpio` with the broken stock version. `pi-rc522` only *imports* `RPi.GPIO`, and `rpi-lgpio` already supplies that name.
 
-### systemd service
+You now have the `playbox` command at `~/playbox/.venv/bin/playbox`.
 
-Install the service so playbox starts on boot. Substitute your user and repo path into the template:
+---
+
+## 4. Add music
+
+```
+~/music/            ← tracks, any folder structure
+~/music/playlists/  ← .m3u / .m3u8 playlists
+```
+
+Copy files over with `scp -r ./album playbox@playbox.local:~/music/`.
+
+A playlist is a plain `.m3u` listing track paths (relative to the music dir, or absolute), one per line. Its *name* for callbacks is the filename without extension (`playlists/morning.m3u` → `morning`).
+
+Supported: mp3, flac, ogg/opus, m4a/aac, wav, wma.
+
+---
+
+## 5. Run it
 
 ```bash
-sed -e "s|__USER__|playbox|g" \
-    -e "s|__REPO__|/home/playbox/playbox|g" \
-    systemd/playbox.service | sudo tee /etc/systemd/system/playbox.service >/dev/null
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now playbox
+cd ~/playbox
+source .venv/bin/activate
+playbox
 ```
 
-The unit runs `~/playbox/.venv/bin/playbox` and sets `PLAYBOX_CONFIG_DIR` to the repo's `config/`. For the `shutdown` callback to work, allow passwordless shutdown:
+Logs go to the terminal; **Ctrl-C** stops it. Useful flags:
+
+```bash
+playbox -v                  # debug logging
+playbox --port 8080         # override the web port
+playbox --config-dir ./config
+```
+
+Then open **`http://playbox.local:8050`** (or the Pi's IP) from any device on the network.
+
+To keep it running after you disconnect, `tmux` is the simplest option:
+
+```bash
+sudo apt install -y tmux
+tmux new -s playbox         # run playbox inside, then Ctrl-B then D to detach
+tmux attach -t playbox      # come back later
+```
+
+---
+
+## 6. Using the web app
+
+- **Play** — your playlists and tracks; click one to play.
+- **Control** — play/pause/stop/prev/next, volume slider, live now-playing.
+- **Setup**
+  - **Register RFID tag:** click *Start scan*, hold a tag to the reader, and its UID is captured. Give it a name, pick a **callback**, optionally add **args** as JSON, then *Save tag*. It's written to `config/tags.yaml` and works immediately.
+  - **Configured tags:** the existing tags, with delete buttons.
+  - **Settings:** music directory, ALSA device, default volume.
+
+The `shutdown` callback needs passwordless shutdown rights:
 
 ```bash
 echo 'playbox ALL=(root) NOPASSWD: /sbin/shutdown' | sudo tee /etc/sudoers.d/playbox-shutdown
 sudo chmod 0440 /etc/sudoers.d/playbox-shutdown
 ```
 
-> **Automated install (work in progress).** `scripts/install.sh` performs the same package/venv/pip/systemd steps unattended (and `scripts/Automation_Custom_Script.sh` is a DietPi first-boot hook around it). These are kept for later automation but the manual path above is the supported one today.
-
 ---
 
-## 4. Add music
+## 7. Optional: run it on boot
 
-Copy audio files into the music directory on the Pi (over SSH/SCP, or enable Samba in `dietpi-software`):
+Not set up by default — start it by hand while you're still changing things. When you do want it automatic, a systemd unit is about ten lines:
 
+```ini
+# /etc/systemd/system/playbox.service
+[Unit]
+Description=playbox music player
+After=network-online.target sound.target
+
+[Service]
+Type=simple
+User=playbox
+WorkingDirectory=/home/playbox/playbox
+Environment=PLAYBOX_CONFIG_DIR=/home/playbox/playbox/config
+ExecStart=/home/playbox/playbox/.venv/bin/playbox
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
-/mnt/dietpi_userdata/music/            ← tracks (any folder structure)
-/mnt/dietpi_userdata/music/playlists/  ← .m3u / .m3u8 playlists
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now playbox
+journalctl -u playbox -f
 ```
 
-A playlist is a plain `.m3u` file listing track paths (relative to the music directory or absolute), one per line. The playlist *name* used by callbacks is the filename without extension (e.g. `playlists/morning.m3u` → `morning`).
-
-Supported track formats: mp3, flac, ogg/opus, m4a/aac, wav, wma.
-
 ---
 
-## 5. Use the web app
+## 8. Configuration reference
 
-Open **`http://playbox:8050`** (or the Pi's IP) from any device on the same network.
-
-- **Play** — lists your playlists and tracks; click one to play it.
-- **Control** — play/pause/stop/prev/next, a volume slider, and a live now-playing display.
-- **Setup**
-  - **Register RFID tag:** click *Start scan*, hold a tag to the reader; its UID is captured automatically. Fill in a name/description, pick a **callback**, optionally provide **args** (as JSON), and *Save tag*. The tag is written to `config/tags.yaml` and works immediately.
-  - **Configured tags:** table of existing tags with delete buttons.
-  - **Settings:** music directory, ALSA audio device, default volume.
-
----
-
-## 6. Configuration reference
-
-Config files live in `config/` (the service sets `PLAYBOX_CONFIG_DIR` to the repo's `config/`). Missing files are seeded from packaged defaults on first run.
+Config lives in `config/` next to the source checkout. Missing files are seeded from the packaged defaults in `src/playbox/defaults/` on first run.
 
 ### `settings.yaml`
 | Key | Meaning |
 |-----|---------|
-| `music_dir` | Music root directory |
-| `audio_device` | ALSA device for mpv. With the WM8960 HAT this is **card 0**, so `alsa/hw:0,0`; `auto` lets mpv choose (find the card with `aplay -l`) |
-| `volume` | Default startup volume (0–100) |
+| `music_dir` | Music root (`~` is expanded) |
+| `audio_device` | mpv audio device. `auto` picks the ALSA default, which is the WM8960 since HDMI audio is off. `alsa/hw:0,0` for exclusive access |
+| `volume` | Startup volume (0–100) |
 | `web_host` / `web_port` | Web bind address / port |
-| `rfid_wait_timeout` | (reserved) IRQ wait re-arm timeout |
 | `rfid_debounce` | Seconds to ignore repeat reads of a held tag |
 
 ### `tags.yaml` / `buttons.yaml`
@@ -163,7 +255,7 @@ tags:
     description: "Wake-up playlist"
     callback: play_playlist  # a registered callback name
     args:
-      playlist: morning      # keyword args passed to the callback
+      playlist: morning      # passed to the callback as keyword args
 
 buttons:
   - pin: 27                  # BCM GPIO number
@@ -182,8 +274,9 @@ buttons:
 | `volume` | `level: 0-100` **or** `delta: ±n` | Set/adjust volume |
 | `shutdown` | — | Halt the system |
 
-### Adding a custom callback
-Register any function in `src/playbox/callbacks.py` (in `build_default_registry`). It receives the shared player plus the YAML `args` as keywords:
+### Adding your own callback
+
+This is the intended extension point. Register a function in `src/playbox/callbacks.py` (inside `build_default_registry`); it receives the shared player plus the YAML `args` as keywords:
 
 ```python
 @registry.callback("announce")
@@ -191,43 +284,49 @@ def announce(player, message="hello", **_):
     ...
 ```
 
-Then reference `callback: announce` with `args: {message: "..."}` from a tag or button.
+Then use `callback: announce` with `args: {message: "..."}` from any tag or button.
 
 ---
 
-## 7. Service management
+## 9. Development on a PC (no hardware)
 
-```bash
-systemctl status playbox          # is it running?
-sudo systemctl restart playbox    # apply config / audio-device changes
-journalctl -u playbox -f          # live logs
-```
-
----
-
-## 8. Development on a PC (no hardware)
-
-playbox runs without the Pi hardware for working on the web app/player. The hardware services detect the missing libraries/devices and become no-ops (logged as warnings).
+The hardware services detect missing libraries and become no-ops (logged as warnings), so the web app and player logic can be worked on off-device.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .                          # core deps only (no [pi] extra)
-# point at a local music folder and run:
+pip install -e .
 PLAYBOX_CONFIG_DIR=./config python -m playbox
 ```
 
-Core deps (`dash`, `python-mpv`, `PyYAML`) install anywhere; the `[pi]` extra (`gpiozero`, `lgpio`, `rpi-lgpio`, `spidev`) plus `pi-rc522` are for the device. `python-mpv` needs `libmpv` present on the host to actually play audio.
+`python-mpv` needs `libmpv` on the host to actually produce sound.
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Check |
 |---------|-------|
-| No sound | `aplay -l` shows the WM8960 card (card 0)? Is `audio_device` set to `alsa/hw:0,0`? Did you reboot after enabling the HAT? Is `arm_64bit=0` in `/boot/dietpi.txt`? |
-| RFID not reading | SPI enabled (`ls /dev/spidev*`)? IRQ/RST wired to GPIO24/GPIO25? User in `spi`/`gpio` groups? `rpi-lgpio` installed (not stock `RPi.GPIO`)? |
-| `Failed to add edge detection` | Stock `RPi.GPIO` is installed — `pip uninstall -y RPi.GPIO && pip install rpi-lgpio` (then reinstall `pi-rc522` with `--no-deps`) |
-| Buttons do nothing | Correct BCM pins in `buttons.yaml`? User in `gpio` group? |
-| Web app unreachable | `systemctl status playbox`; firewall/port; reachable as `http://playbox:8050` |
-| `shutdown` callback fails | `/etc/sudoers.d/playbox-shutdown` present? |
+| No sound card in `aplay -l` | Is `dtoverlay=wm8960-soundcard` spelled correctly and under `[all]`? Did you reboot? |
+| Card exists but silence | The output mixers — see [2.6](#26-unmute-the-codec). This is the usual cause |
+| Mixer resets on reboot | Run `sudo alsactl store` after setting it |
+| RFID not reading | `ls /dev/spidev*` — SPI enabled? IRQ on GPIO24 and RST on GPIO25 wired? |
+| `Failed to add edge detection` | Stock `RPi.GPIO` got installed. `pip uninstall -y RPi.GPIO`, confirm `python3-rpi-lgpio` is present, reinstall pi-rc522 with `--no-deps` |
+| `ModuleNotFoundError: mpv` | Venv made without `--system-site-packages`, or `python3-mpv` not installed |
+| Buttons do nothing | Correct BCM pins in `buttons.yaml`? |
+| Web app unreachable | Is the process still running? Check the terminal / `tmux attach` |
+
+### Checking the RC522 without any library
+
+If tags aren't reading, this narrows it to wiring vs. software. Reading `VersionReg` and checking registers with documented reset values proves the SPI link:
+
+```python
+import spidev
+from gpiozero import DigitalOutputDevice
+rst = DigitalOutputDevice(25, initial_value=True)
+spi = spidev.SpiDev(); spi.open(0, 0); spi.max_speed_hz = 1_000_000
+rd = lambda reg: spi.xfer2([((reg << 1) & 0x7E) | 0x80, 0x00])[1]
+print(f"VersionReg 0x{rd(0x37):02X}   CommandReg 0x{rd(0x01):02X} (expect 0x20)")
+```
+
+`CommandReg` reading `0x20` means SPI works. `VersionReg` is `0x91`/`0x92` on genuine chips, but clones report other values (e.g. `0xB2`) and work fine — `pi-rc522` doesn't check it.

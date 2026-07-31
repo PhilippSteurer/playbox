@@ -120,8 +120,8 @@ def build_default_registry() -> CallbackRegistry:
 
     @registry.callback("shutdown")
     def shutdown(player, **_: Any) -> None:
-        """Halt the system. Requires the service user to have passwordless
-        ``sudo shutdown`` (configured by install.sh)."""
+        """Halt the system. Requires the running user to have passwordless
+        ``sudo shutdown`` (see README section 6)."""
         player.stop()
         subprocess.run(["sudo", "shutdown", "-h", "now"], check=False)
 

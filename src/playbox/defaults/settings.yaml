@@ -2,12 +2,14 @@
 # Copied into your config directory on first run if missing. Edit there.
 
 # Directory holding music files. Playlists (.m3u/.m3u8) are expected under
-# <music_dir>/playlists. On the Pi this defaults to the DietPi user data area.
-music_dir: /mnt/dietpi_userdata/music
+# <music_dir>/playlists. "~" is expanded, so this works for any user.
+music_dir: ~/music
 
-# ALSA output device passed to mpv. With the WM8960 HAT enabled it enumerates as
-# card 0 (check with `aplay -l`), so set "alsa/hw:0,0" on the Pi.
-# Leave as "auto" to let mpv pick the default device (useful on a dev PC).
+# ALSA output device passed to mpv.
+# "auto" lets mpv pick the ALSA default. Because config.txt disables HDMI audio
+# (vc4-kms-v3d,noaudio), the WM8960 HAT is the only card, so "auto" resolves to
+# it and also gets automatic format conversion for odd sample rates.
+# Set "alsa/hw:0,0" instead if you want exclusive, unconverted access.
 audio_device: auto
 
 # Default startup volume (0-100).

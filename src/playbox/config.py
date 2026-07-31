@@ -39,7 +39,7 @@ _DEFAULT_FILES = ("settings.yaml", "tags.yaml", "buttons.yaml")
 # --------------------------------------------------------------------------- #
 @dataclass
 class Settings:
-    music_dir: Path = Path("/mnt/dietpi_userdata/music")
+    music_dir: Path = Path.home() / "music"
     audio_device: str = "auto"
     volume: int = 70
     web_host: str = "0.0.0.0"

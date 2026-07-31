@@ -2,12 +2,13 @@
 
 Rather than polling the card over SPI in a tight loop, this uses pi-rc522's
 ``wait_for_tag()``, which arms the RC522's IRQ register and blocks on the GPIO
-interrupt event (RST=GPIO24/IRQ wiring per pinout.md) until a card is present
+interrupt event (IRQ=GPIO24, RST=GPIO25 per pinout.md) until a card is present
 or the wait is interrupted for shutdown. It does not poll the card itself.
 
 The RFID stack on the Pi is ``pi-rc522`` (imported as ``pirc522``) plus
 ``rpi-lgpio`` — an lgpio-backed drop-in for ``RPi.GPIO``, because the stock
 ``RPi.GPIO`` fails with "Failed to add edge detection" on current kernels.
+On Raspberry Pi OS ``rpi-lgpio`` comes from apt as ``python3-rpi-lgpio``.
 
 On a machine without the RFID library/hardware (e.g. a dev PC), the service
 logs a warning and does nothing, so the rest of the app still runs.

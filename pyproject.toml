@@ -12,31 +12,27 @@ license = { text = "MIT" }
 authors = [{ name = "playbox" }]
 keywords = ["raspberry-pi", "rfid", "music-player", "dash", "wm8960", "rc522"]
 
-# Core dependencies — installable on any machine (dev PC included) so the web
-# app and player logic can be worked on without the Pi hardware present.
+# Everything needed to run the web app and player logic. Installable on any
+# machine — the hardware services degrade to no-ops when GPIO/SPI are absent,
+# so the app still runs on a dev PC.
+#
+# On the Pi these come from apt (python3-mpv, python3-yaml) and are already
+# satisfied inside a --system-site-packages venv, so only `dash` is fetched.
 dependencies = [
     "dash>=2.16",
     "python-mpv>=1.0.5",
     "PyYAML>=6.0",
 ]
 
-[project.optional-dependencies]
-# Hardware-only dependencies. Installed on the Pi with: pip install '.[pi]'
-# These pull in GPIO/SPI libraries that only make sense on the device.
+# The Pi-only libraries (gpiozero, spidev, lgpio, rpi-lgpio) are NOT listed
+# here on purpose: they all ship as prebuilt apt packages on Raspberry Pi OS,
+# which avoids compiling anything on a Zero 2W. See README section 2.
 #
-# NOTE: the RFID library `pi-rc522` is deliberately NOT listed here. It hard-
-# depends on `RPi.GPIO`, which fails on current kernels ("Failed to add edge
-# detection") and collides with `rpi-lgpio` (both own the `RPi/` package dir).
-# Install it separately, without its deps, after this extra:
+# The one pip package needed on the Pi beyond the above is the RFID driver:
 #     pip install --no-deps pi-rc522
-# `rpi-lgpio` below provides the `RPi.GPIO` module name (backed by lgpio) that
-# pi-rc522 imports. See README / scripts/install.sh.
-pi = [
-    "gpiozero>=2.0",
-    "lgpio>=0.2.2",
-    "rpi-lgpio>=0.6",
-    "spidev>=3.6",
-]
+# `--no-deps` because pi-rc522 hard-depends on RPi.GPIO, which would collide
+# with the apt-installed rpi-lgpio that provides the same `RPi.GPIO` import
+# name (backed by lgpio, and the one that actually works on this kernel).
 
 [project.scripts]
 playbox = "playbox.__main__:main"

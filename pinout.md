@@ -41,4 +41,17 @@ Assign the following GPIO pins for playback control buttons:
 ## I2C & SPI Configuration
 - **I2C1**: GPIO2 (SDA), GPIO3 (SCL) - WM8960 codec communication
 - **SPI0**: GPIO8-11 - RC522 RFID reader communication
-- Both must be enabled via `raspi-config` or device tree overlays
+- Enable both in `raspi-config` → Interface Options (I4 SPI, I5 I2C)
+
+## Sound card
+
+The WM8960 is enabled by one line in `/boot/firmware/config.txt` (under `[all]`):
+
+```ini
+dtoverlay=wm8960-soundcard
+```
+
+The overlay ships with Raspberry Pi OS. It switches on I2S, declares the codec
+on I2C at address `0x1a`, and joins them into a `simple-audio-card`. Verify with
+`i2cdetect -y 1` — `UU` at `1a` means the kernel driver has bound to it.
+See README section 2.3 for full setup.
