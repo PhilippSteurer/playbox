@@ -5,8 +5,8 @@ playbox is a Raspberry Pi based **offline** music player controlled three ways: 
 Music plays entirely from local files — no network is needed at playback time. Tags and buttons trigger **callbacks** (play a track, play a playlist, pause, volume, shutdown, …), and the callback system is open so you can add your own.
 
 - **Web app** (Plotly Dash), three pages: **Play** (browse and play), **Control** (transport, volume, now playing), **Setup** (register RFID tags, edit settings).
-- **RFID tags** are registered *from the web app*: hold a tag to the reader, its UID is captured, then you pick a callback for it. Stored in `config/tags.yaml`.
-- **Buttons** map GPIO pins to the same callbacks via `config/buttons.yaml`.
+- **RFID tags** are registered *from the web app*: hold a tag to the reader, its UID is captured, then you pick a callback for it. Stored in `tags.yaml` (see [section 8](#8-configuration-reference) for where that lives).
+- **Buttons** map GPIO pins to the same callbacks via `buttons.yaml`.
 - A normal Python package (`pip install .`) exposing a `playbox` command, **started by hand**. No service is installed — see [section 7](#7-optional-run-it-on-boot) if you want that later.
 
 ---
@@ -191,7 +191,7 @@ tmux attach -t playbox      # come back later
 - **Play** — your playlists and tracks; click one to play.
 - **Control** — play/pause/stop/prev/next, volume slider, live now-playing.
 - **Setup**
-  - **Register RFID tag:** click *Start scan*, hold a tag to the reader, and its UID is captured. Give it a name, pick a **callback**, optionally add **args** as JSON, then *Save tag*. It's written to `config/tags.yaml` and works immediately.
+  - **Register RFID tag:** click *Start scan*, hold a tag to the reader, and its UID is captured. Give it a name, pick a **callback**, optionally add **args** as JSON, then *Save tag*. It's written to `tags.yaml` and works immediately.
   - **Configured tags:** the existing tags, with delete buttons.
   - **Settings:** music directory, ALSA device, default volume.
 
@@ -218,7 +218,6 @@ After=network-online.target sound.target
 Type=simple
 User=playbox
 WorkingDirectory=/home/playbox/playbox
-Environment=PLAYBOX_CONFIG_DIR=/home/playbox/playbox/config
 ExecStart=/home/playbox/playbox/.venv/bin/playbox
 Restart=on-failure
 
@@ -232,11 +231,27 @@ sudo systemctl enable --now playbox
 journalctl -u playbox -f
 ```
 
+Deliberately no `PLAYBOX_CONFIG_DIR` here, so the service reads the same `~/.config/playbox/` you've been using by hand. Setting it would silently give the service a different config than your manual runs.
+
 ---
 
 ## 8. Configuration reference
 
-Config lives in `config/` next to the source checkout. Missing files are seeded from the packaged defaults in `src/playbox/defaults/` on first run.
+Missing config files are seeded from the packaged defaults in `src/playbox/defaults/` on first run. The directory is chosen by the first rule that matches:
+
+1. **`PLAYBOX_CONFIG_DIR`**, if set.
+2. **`<repo>/config/`** when running from a source checkout — i.e. `pip install -e .` or `python -m playbox` in the repo.
+3. **`~/.config/playbox/`** otherwise.
+
+**On the Pi you get rule 3**, because `pip install .` (not `-e`) copies the package into `.venv/lib/python3.13/site-packages/`, which isn't a source checkout. So your live config is:
+
+```
+~/.config/playbox/settings.yaml
+~/.config/playbox/tags.yaml
+~/.config/playbox/buttons.yaml
+```
+
+That's a good place for it — `git pull` can never clobber your registered tags. If you'd rather keep config beside the checkout, start it as `playbox --config-dir ~/playbox/config`.
 
 ### `settings.yaml`
 | Key | Meaning |
