@@ -245,7 +245,7 @@ Missing config files are seeded from the packaged defaults in `src/playbox/defau
 
 **On the Pi you get rule 3**, because `pip install .` (not `-e`) copies the package into `.venv/lib/python3.13/site-packages/`, which isn't a source checkout. So your live config is:
 
-```
+```text
 ~/.config/playbox/settings.yaml
 ~/.config/playbox/tags.yaml
 ~/.config/playbox/buttons.yaml
